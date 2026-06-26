@@ -8,7 +8,7 @@ No Flow Studio, no hosted MCP, no stored secrets.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Status: Beta](https://img.shields.io/badge/status-beta%20v0.1-orange.svg)
 
-> ### ⚠️ Beta (v0.1)
+> ### ⚠️ Beta (v0.3)
 > This is early, pre-1.0 software. The CLI surface, command output, skill
 > contents, and config schema **may change without notice** between 0.x
 > releases. Pin to a tag if you depend on it.
