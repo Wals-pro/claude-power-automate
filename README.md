@@ -6,7 +6,7 @@ No third-party hosted service, no stored secrets.
 
 [![CI](https://github.com/Wals-pro/claude-power-automate/actions/workflows/ci.yml/badge.svg)](https://github.com/Wals-pro/claude-power-automate/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Status: Beta](https://img.shields.io/badge/status-beta%20v0.1-orange.svg)
+![Status: Beta](https://img.shields.io/badge/status-beta%20v0.3-orange.svg)
 
 > ### ⚠️ Beta (v0.3)
 > This is early, pre-1.0 software. The CLI surface, command output, skill
@@ -67,7 +67,7 @@ from local artifacts, the same way teams already manage code.
 Requires Python 3.10+ and the [Azure CLI](docs/az-cli-setup.md).
 
 ```bash
-pip install "git+https://github.com/Wals-pro/claude-power-automate@v0.1.0"
+pip install "git+https://github.com/Wals-pro/claude-power-automate@v0.3.0"
 power-automate --help
 ```
 
