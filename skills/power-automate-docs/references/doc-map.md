@@ -39,7 +39,7 @@ surface explicitly supports it.
   https://learn.microsoft.com/en-us/rest/api/power-platform/powerautomate/flow-runs/list-flow-runs
 
 Default: use the `power-automate` CLI for local pull/diff/deploy instead of
-hosted Flow Studio MCP.
+a hosted MCP service.
 
 ## Connectors and Actions
 

@@ -1,7 +1,7 @@
 # Power Automate API Client
 
 Use the `power-automate` CLI when a solution-aware Power Automate cloud flow
-must be inspected or deployed without Flow Studio or any hosted MCP. The client
+must be inspected or deployed without a third-party hosted service. The client
 is local, uses open Python dependencies only, and authenticates through an
 existing Azure CLI user session.
 
@@ -46,7 +46,7 @@ az login
 ```
 
 The client calls `az account get-access-token` for Dataverse and
-`https://api.powerplatform.com/`. No app registration or Flow Studio token is
+`https://api.powerplatform.com/`. No app registration or third-party service token is
 required.
 
 ## Commands
@@ -84,7 +84,7 @@ metadata but does not have permission to read run history for that flow.
 Solution cloud flows are stored in Dataverse as `workflow` rows. The flow
 definition and connection references are stored as string-encoded JSON in the
 `clientdata` column. The local artifact shape remains compatible with the
-existing Flow Studio export:
+existing portal export:
 
 ```json
 {

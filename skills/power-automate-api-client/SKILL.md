@@ -3,14 +3,14 @@ name: power-automate-api-client
 description: >
   Work with Microsoft Power Automate cloud flows through the power-automate
   CLI. Use for pull, diff, deploy, create, start, stop, run history, action
-  diagnostics, or replacing hosted Flow Studio MCP access with local open
+  diagnostics, or replacing a hosted MCP service with local open
   tooling.
 ---
 
 # Power Automate API Client
 
 Use this skill when changing or diagnosing Power Automate cloud flows from the
-command line. The default tool is the `power-automate` CLI, not Flow Studio MCP.
+command line. The default tool is the `power-automate` CLI, not a hosted MCP service.
 
 ## Rules
 

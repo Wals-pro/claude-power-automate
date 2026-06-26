@@ -2,7 +2,7 @@
 flows, backed by the Dataverse Web API and the Power Platform API.
 
 Authentication uses an existing ``az login`` session; no app registration,
-service principal, or hosted Flow Studio token is required. This package stores
+service principal, or third-party hosted-service token is required. This package stores
 no secrets.
 
 Part of the **claude-power-automate** suite (Claude Code skills + CLI).

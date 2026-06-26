@@ -2,7 +2,7 @@
 
 **A Claude Code suite for Microsoft Power Automate development** — eight focused
 Agent Skills plus a local, open CLI for inspecting and deploying cloud flows.
-No Flow Studio, no hosted MCP, no stored secrets.
+No third-party hosted service, no stored secrets.
 
 [![CI](https://github.com/Wals-pro/claude-power-automate/actions/workflows/ci.yml/badge.svg)](https://github.com/Wals-pro/claude-power-automate/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -50,7 +50,8 @@ from local artifacts, the same way teams already manage code.
 ## Why
 
 - **Local and open.** The runtime is plain Python plus official Microsoft APIs.
-  No Flow Studio session and no hosted MCP service are required to deploy.
+  No subscription and no session with a third-party hosted service are required
+  to deploy.
 - **No secrets, ever.** Short-lived OAuth tokens come exclusively from your
   existing `az login` session. The tool stores nothing. The only thing it reads
   is the *non-secret* target of a command (which environment / flow).
