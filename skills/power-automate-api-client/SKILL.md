@@ -54,6 +54,21 @@ power-automate runs --profile acme --all-environments --json
 power-automate run-detail --profile acme <run-id>
 ```
 
+### Solutions & environment variables
+
+```bash
+power-automate solutions --profile acme [--unmanaged-only]
+power-automate solution-components --profile acme --solution <unique-name>
+power-automate env-vars --profile acme [--solution <unique-name>]
+power-automate env-var-get --profile acme acme_ApiBaseUrl
+power-automate env-var-set --profile acme acme_ApiBaseUrl "https://api.example.com" --solution <unique-name> --dry-run
+```
+
+**Secret-type environment variables are masked** by default (Azure Key
+Vault-backed); `--reveal-secret` shows only the Key Vault *reference*, never the
+secret. `env-var-set` refuses Secret-type variables. For solution/ALM and
+environment-variable work, use the `power-automate-solutions` skill.
+
 Default discovery stays within the configured profile environment. Use
 `--all-environments` only when the task explicitly needs every environment the
 signed-in Azure user can see.

@@ -99,3 +99,23 @@ existing Flow Studio export:
 Run history is read through the Power Platform API. Detailed action history
 uses the documented workflows agent endpoint and may require the same user to
 have sufficient environment/run-history permissions.
+
+## Solutions & environment variables
+
+```bash
+power-automate solutions --profile acme
+power-automate solution-components --profile acme --solution <unique-name>
+power-automate env-vars --profile acme --solution <unique-name>
+power-automate env-var-get --profile acme acme_ApiBaseUrl
+power-automate env-var-set --profile acme acme_ApiBaseUrl "https://api.example.com" --solution <unique-name> --dry-run
+```
+
+Environment variables parameterize a solution across environments. `env-vars`
+lists definitions with their current and default values; `env-var-set` upserts
+a value and, with `--solution`, keeps it associated with the solution so it
+ships through the DEV → PROD pipeline.
+
+Secret-type environment variables are Azure Key Vault-backed: their values are
+**masked** by default, `--reveal-secret` shows only the Key Vault reference (not
+the secret), and `env-var-set` refuses Secret-type variables. See the
+`power-automate-solutions` skill for ALM detail.

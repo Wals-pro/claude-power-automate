@@ -443,5 +443,92 @@ class ProfileResolveTest(unittest.TestCase):
             pa_config.resolve_field("acme", "not_a_field")
 
 
+class SolutionsAndEnvVarTest(unittest.TestCase):
+    def _client(self, session):
+        config = pa.PowerAutomateConfig(
+            tenant="t",
+            environment_id="env-1",
+            flow_id="flow-1",
+            dataverse_url="https://org.crm4.dynamics.com",
+        )
+        token_provider = Mock()
+        token_provider.token_for.return_value = "token"
+        return pa.PowerAutomateClient(config, token_provider, session)
+
+    def test_list_solutions_filters_visible_and_unmanaged(self):
+        session = Mock()
+        session.request.return_value = response({"value": [
+            {"uniquename": "MySolution", "friendlyname": "My Solution", "version": "1.0.0.0", "ismanaged": False},
+        ]})
+        client = self._client(session)
+        result = client.list_solutions(include_managed=False)
+        url = session.request.call_args.args[1]
+        self.assertIn("/solutions?", url)
+        self.assertIn("isvisible+eq+true", url)
+        self.assertIn("ismanaged+eq+false", url)
+        self.assertEqual(result[0]["uniquename"], "MySolution")
+
+    def test_env_var_display_masks_secret_but_shows_string(self):
+        secret_def = {"type": pa.SECRET_ENV_VAR_TYPE}
+        string_def = {"type": 100000000}
+        self.assertEqual(pa.env_var_display(secret_def, "akv://vault/secret"), pa.SECRET_PLACEHOLDER)
+        self.assertEqual(pa.env_var_display(secret_def, "akv://vault/secret", reveal_secret=True), "akv://vault/secret")
+        self.assertEqual(pa.env_var_display(string_def, "https://api.example.com"), "https://api.example.com")
+        self.assertTrue(pa.is_secret_env_var(secret_def))
+        self.assertFalse(pa.is_secret_env_var(string_def))
+        self.assertEqual(pa.env_var_type_label(secret_def), "Secret")
+
+    def test_set_env_var_refuses_secret_type(self):
+        session = Mock()
+        client = self._client(session)
+        secret_def = {
+            "schemaname": "acme_Secret",
+            "type": pa.SECRET_ENV_VAR_TYPE,
+            "environmentvariabledefinitionid": "def-1",
+            "environmentvariabledefinition_environmentvariablevalue": [],
+        }
+        with patch.object(client, "list_environment_variables", return_value=[secret_def]):
+            with self.assertRaises(pa.PowerAutomateError):
+                client.set_environment_variable_value("acme_Secret", "should-not-store")
+        session.request.assert_not_called()
+
+    def test_set_env_var_patches_existing_value(self):
+        session = Mock()
+        session.request.return_value = response(None, status_code=204)
+        client = self._client(session)
+        string_def = {
+            "schemaname": "acme_ApiBaseUrl",
+            "type": 100000000,
+            "environmentvariabledefinitionid": "def-1",
+            "environmentvariabledefinition_environmentvariablevalue": [
+                {"value": "old", "environmentvariablevalueid": "val-1"}
+            ],
+        }
+        with patch.object(client, "list_environment_variables", return_value=[string_def]):
+            result = client.set_environment_variable_value("acme_ApiBaseUrl", "https://new.example.com")
+        self.assertEqual(session.request.call_args.args[0], "PATCH")
+        self.assertIn("/environmentvariablevalues(val-1)", session.request.call_args.args[1])
+        self.assertEqual(result, {"schemaName": "acme_ApiBaseUrl", "valueId": "val-1", "created": False})
+
+    def test_set_env_var_creates_value_bound_to_definition(self):
+        session = Mock()
+        session.request.return_value = response({"environmentvariablevalueid": "val-new"})
+        client = self._client(session)
+        string_def = {
+            "schemaname": "acme_ApiBaseUrl",
+            "type": 100000000,
+            "environmentvariabledefinitionid": "def-1",
+            "environmentvariabledefinition_environmentvariablevalue": [],
+        }
+        with patch.object(client, "list_environment_variables", return_value=[string_def]):
+            result = client.set_environment_variable_value(
+                "acme_ApiBaseUrl", "https://new.example.com", solution_unique_name="MySolution"
+            )
+        self.assertEqual(session.request.call_args.args[0], "POST")
+        body = session.request.call_args.kwargs["json"]
+        self.assertEqual(body["EnvironmentVariableDefinitionId@odata.bind"], "/environmentvariabledefinitions(def-1)")
+        self.assertTrue(result["created"])
+
+
 if __name__ == "__main__":
     unittest.main()

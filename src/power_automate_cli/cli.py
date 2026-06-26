@@ -40,6 +40,33 @@ PROCESS_FLOW_EXPAND = (
     "properties.owningUser"
 )
 
+SECRET_ENV_VAR_TYPE = 100000005
+ENV_VAR_DEFINITION_COMPONENT_TYPE = 380
+SECRET_PLACEHOLDER = "<secret · Azure Key Vault-backed>"
+ENV_VAR_TYPE_LABELS = {
+    100000000: "String",
+    100000001: "Number",
+    100000002: "Boolean",
+    100000003: "JSON",
+    100000004: "Data Source",
+    SECRET_ENV_VAR_TYPE: "Secret",
+}
+SOLUTION_COMPONENT_TYPE_LABELS = {
+    1: "Entity",
+    29: "Workflow / Cloud flow",
+    31: "Report",
+    60: "SystemForm",
+    61: "WebResource",
+    62: "SiteMap",
+    90: "PluginAssembly",
+    91: "SDKMessageProcessingStep",
+    92: "ServiceEndpoint",
+    300: "CanvasApp",
+    380: "EnvironmentVariableDefinition",
+    381: "EnvironmentVariableValue",
+    10112: "ConnectionReference",
+}
+
 
 class PowerAutomateError(RuntimeError):
     """Raised for expected CLI/API failures with user-readable messages."""
@@ -220,6 +247,96 @@ class PowerAutomateClient:
             self.set_state(True, flow_id=new_flow_id)
         return created
 
+    def list_solutions(self, include_managed: bool = True) -> list[dict[str, Any]]:
+        filters = ["isvisible eq true"]
+        if not include_managed:
+            filters.append("ismanaged eq false")
+        params = {
+            "$select": "solutionid,uniquename,friendlyname,version,ismanaged,installedon,modifiedon",
+            "$filter": " and ".join(filters),
+            "$orderby": "friendlyname asc",
+        }
+        url = f"{self.dataverse_url}/api/data/{DATAVERSE_API_VERSION}/solutions?{urlencode(params)}"
+        return self._get_paged(url, self.dataverse_url)
+
+    def get_solution(self, unique_name: str) -> dict[str, Any]:
+        params = {
+            "$select": "solutionid,uniquename,friendlyname,version,ismanaged",
+            "$filter": f"uniquename eq '{escape_odata(unique_name)}'",
+        }
+        url = f"{self.dataverse_url}/api/data/{DATAVERSE_API_VERSION}/solutions?{urlencode(params)}"
+        rows = self._get_paged(url, self.dataverse_url)
+        if not rows:
+            raise PowerAutomateError(
+                f"Solution not found: {unique_name!r}. Run `solutions` to list available solutions."
+            )
+        return rows[0]
+
+    def solution_components(self, solution_id: str) -> list[dict[str, Any]]:
+        params = {
+            "$select": "solutioncomponentid,componenttype,objectid,rootcomponentbehavior",
+            "$filter": f"_solutionid_value eq {solution_id}",
+        }
+        url = f"{self.dataverse_url}/api/data/{DATAVERSE_API_VERSION}/solutioncomponents?{urlencode(params)}"
+        return self._get_paged(url, self.dataverse_url)
+
+    def list_environment_variables(self, solution_unique_name: Optional[str] = None) -> list[dict[str, Any]]:
+        params = {
+            "$select": "environmentvariabledefinitionid,schemaname,displayname,type,defaultvalue,description",
+            "$expand": "environmentvariabledefinition_environmentvariablevalue($select=value,environmentvariablevalueid)",
+            "$orderby": "schemaname asc",
+        }
+        if solution_unique_name:
+            solution = self.get_solution(solution_unique_name)
+            ids = [
+                c["objectid"]
+                for c in self.solution_components(solution["solutionid"])
+                if c.get("componenttype") == ENV_VAR_DEFINITION_COMPONENT_TYPE and c.get("objectid")
+            ]
+            if not ids:
+                return []
+            params["$filter"] = " or ".join(f"environmentvariabledefinitionid eq {i}" for i in ids)
+        url = f"{self.dataverse_url}/api/data/{DATAVERSE_API_VERSION}/environmentvariabledefinitions?{urlencode(params)}"
+        return self._get_paged(url, self.dataverse_url)
+
+    def set_environment_variable_value(
+        self,
+        schema_name: str,
+        value: str,
+        solution_unique_name: Optional[str] = None,
+    ) -> dict[str, Any]:
+        definition = next(
+            (d for d in self.list_environment_variables() if d.get("schemaname") == schema_name),
+            None,
+        )
+        if definition is None:
+            raise PowerAutomateError(f"Environment variable not found: {schema_name!r}.")
+        if is_secret_env_var(definition):
+            raise PowerAutomateError(
+                "Refusing to set a Secret-type environment variable from a literal value. Secret "
+                "variables are backed by Azure Key Vault — configure them in the portal or with a "
+                "Key Vault reference, never by passing the secret here."
+            )
+        definition_id = definition["environmentvariabledefinitionid"]
+        existing = definition.get("environmentvariabledefinition_environmentvariablevalue") or []
+        extra_headers = {"MSCRM.SolutionUniqueName": solution_unique_name} if solution_unique_name else None
+        if existing:
+            value_id = existing[0]["environmentvariablevalueid"]
+            url = f"{self.dataverse_url}/api/data/{DATAVERSE_API_VERSION}/environmentvariablevalues({value_id})"
+            self._request("PATCH", url, resource=self.dataverse_url, json_body={"value": value}, extra_headers=extra_headers)
+            return {"schemaName": schema_name, "valueId": value_id, "created": False}
+        url = f"{self.dataverse_url}/api/data/{DATAVERSE_API_VERSION}/environmentvariablevalues"
+        body = {
+            "value": value,
+            "EnvironmentVariableDefinitionId@odata.bind": f"/environmentvariabledefinitions({definition_id})",
+        }
+        headers = {"Prefer": "return=representation"}
+        if extra_headers:
+            headers.update(extra_headers)
+        created = self._request("POST", url, resource=self.dataverse_url, json_body=body, extra_headers=headers)
+        created = created if isinstance(created, dict) else {}
+        return {"schemaName": schema_name, "valueId": created.get("environmentvariablevalueid"), "created": True}
+
     def list_runs(self, flow_id: Optional[str] = None, environment_id_: Optional[str] = None) -> Any:
         fid = require_flow_id(flow_id or self.config.flow_id)
         eid = environment_id_ or self.config.environment_id
@@ -345,6 +462,47 @@ class PowerAutomateClient:
 
 def normalize_base_url(value: str) -> str:
     return value.rstrip("/")
+
+
+def escape_odata(value: str) -> str:
+    return value.replace("'", "''")
+
+
+def is_secret_env_var(definition: dict[str, Any]) -> bool:
+    try:
+        return int(definition.get("type")) == SECRET_ENV_VAR_TYPE
+    except (TypeError, ValueError):
+        return False
+
+
+def env_var_type_label(definition: dict[str, Any]) -> str:
+    raw = definition.get("type")
+    try:
+        return ENV_VAR_TYPE_LABELS.get(int(raw), str(raw))
+    except (TypeError, ValueError):
+        return str(raw)
+
+
+def env_var_current_value(definition: dict[str, Any]) -> Optional[str]:
+    values = definition.get("environmentvariabledefinition_environmentvariablevalue") or []
+    if values and isinstance(values[0], dict):
+        return values[0].get("value")
+    return None
+
+
+def env_var_display(definition: dict[str, Any], raw_value: Optional[str], reveal_secret: bool = False) -> str:
+    if raw_value in (None, ""):
+        return ""
+    if is_secret_env_var(definition) and not reveal_secret:
+        return SECRET_PLACEHOLDER
+    return str(raw_value)
+
+
+def solution_component_label(component_type: Any) -> str:
+    try:
+        return SOLUTION_COMPONENT_TYPE_LABELS.get(int(component_type), f"Type {component_type}")
+    except (TypeError, ValueError):
+        return f"Type {component_type}"
 
 
 def require_flow_id(value: Optional[str]) -> str:
@@ -1065,6 +1223,100 @@ def cmd_run_detail(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_solutions(args: argparse.Namespace) -> int:
+    client = build_client(args, require_flow=False)
+    solutions = client.list_solutions(include_managed=not args.unmanaged_only)
+    rows = [{
+        "uniqueName": s.get("uniquename", ""),
+        "friendlyName": s.get("friendlyname", ""),
+        "version": s.get("version", ""),
+        "managed": "managed" if s.get("ismanaged") else "unmanaged",
+    } for s in solutions]
+    if args.json:
+        print(canonical({"solutions": rows}), end="")
+    else:
+        print(format_table(rows, ["uniqueName", "friendlyName", "version", "managed"]), end="")
+    return 0
+
+
+def cmd_solution_components(args: argparse.Namespace) -> int:
+    client = build_client(args, require_flow=False)
+    solution = client.get_solution(args.solution)
+    components = client.solution_components(solution["solutionid"])
+    rows = [{
+        "type": solution_component_label(c.get("componenttype")),
+        "componentType": c.get("componenttype", ""),
+        "objectId": c.get("objectid", ""),
+    } for c in components]
+    if args.json:
+        print(canonical({"solution": solution.get("uniquename"), "components": rows}), end="")
+    else:
+        print(format_table(rows, ["type", "componentType", "objectId"]), end="")
+    return 0
+
+
+def cmd_env_vars(args: argparse.Namespace) -> int:
+    client = build_client(args, require_flow=False)
+    definitions = client.list_environment_variables(solution_unique_name=args.solution)
+    rows = []
+    for d in definitions:
+        rows.append({
+            "schemaName": d.get("schemaname", ""),
+            "displayName": d.get("displayname", ""),
+            "type": env_var_type_label(d),
+            "currentValue": env_var_display(d, env_var_current_value(d), reveal_secret=args.reveal_secret),
+            "defaultValue": env_var_display(d, d.get("defaultvalue"), reveal_secret=args.reveal_secret),
+        })
+    if args.json:
+        print(canonical({"environmentVariables": rows}), end="")
+    else:
+        print(format_table(rows, ["schemaName", "displayName", "type", "currentValue", "defaultValue"]), end="")
+    return 0
+
+
+def cmd_env_var_get(args: argparse.Namespace) -> int:
+    client = build_client(args, require_flow=False)
+    definition = next(
+        (d for d in client.list_environment_variables() if d.get("schemaname") == args.schema_name),
+        None,
+    )
+    if definition is None:
+        raise PowerAutomateError(f"Environment variable not found: {args.schema_name!r}.")
+    current = env_var_current_value(definition)
+    print(canonical({
+        "schemaName": definition.get("schemaname"),
+        "displayName": definition.get("displayname"),
+        "type": env_var_type_label(definition),
+        "isSecret": is_secret_env_var(definition),
+        "hasCurrentValue": current not in (None, ""),
+        "currentValue": env_var_display(definition, current, reveal_secret=args.reveal_secret),
+        "defaultValue": env_var_display(definition, definition.get("defaultvalue"), reveal_secret=args.reveal_secret),
+    }), end="")
+    return 0
+
+
+def cmd_env_var_set(args: argparse.Namespace) -> int:
+    client = build_client(args, require_flow=False)
+    if args.dry_run:
+        definition = next(
+            (d for d in client.list_environment_variables() if d.get("schemaname") == args.schema_name),
+            None,
+        )
+        if definition is None:
+            raise PowerAutomateError(f"Environment variable not found: {args.schema_name!r}.")
+        if is_secret_env_var(definition):
+            raise PowerAutomateError(
+                "Refusing to set a Secret-type environment variable from a literal value. "
+                "Secret variables are backed by Azure Key Vault."
+            )
+        # Never echo the value back — avoid leaking it to stdout/logs.
+        print(canonical({"schemaName": args.schema_name, "wouldSet": True, "dryRun": True, "solution": args.solution}), end="")
+        return 0
+    result = client.set_environment_variable_value(args.schema_name, args.value, solution_unique_name=args.solution)
+    print(canonical({**result, "set": True}), end="")
+    return 0
+
+
 def add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--profile", required=True, help="Profile name; resolves env/flow/dataverse from POWER_AUTOMATE_* env vars or profiles.json, and namespaces local backups")
     parser.add_argument("--environment-id", help="Power Platform environment id")
@@ -1165,6 +1417,34 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_flags(p)
     p.add_argument("run_id", help="Run id from `runs`")
 
+    p = sub.add_parser("solutions")
+    add_common_flags(p)
+    p.add_argument("--unmanaged-only", action="store_true", help="List only unmanaged solutions")
+    p.add_argument("--json", action="store_true", help="Print JSON instead of compact table")
+
+    p = sub.add_parser("solution-components")
+    add_common_flags(p)
+    p.add_argument("--solution", required=True, help="Solution unique name")
+    p.add_argument("--json", action="store_true", help="Print JSON instead of compact table")
+
+    p = sub.add_parser("env-vars")
+    add_common_flags(p)
+    p.add_argument("--solution", help="Limit to environment variables that are components of this solution")
+    p.add_argument("--reveal-secret", action="store_true", help="Show Secret-type values (Key Vault references) instead of masking them; never prints the Key Vault secret itself")
+    p.add_argument("--json", action="store_true", help="Print JSON instead of compact table")
+
+    p = sub.add_parser("env-var-get")
+    add_common_flags(p)
+    p.add_argument("schema_name", help="Environment variable schema name, e.g. acme_ApiBaseUrl")
+    p.add_argument("--reveal-secret", action="store_true", help="Show the Secret-type value (Key Vault reference) instead of masking it")
+
+    p = sub.add_parser("env-var-set")
+    add_common_flags(p)
+    p.add_argument("schema_name", help="Environment variable schema name")
+    p.add_argument("value", help="New value (rejected for Secret-type variables — those are Key Vault-backed)")
+    p.add_argument("--solution", help="Add/keep the value in this unmanaged solution so it ships via the DEV->PROD pipeline")
+    p.add_argument("--dry-run", action="store_true", help="Validate (incl. Secret-type guard) without writing")
+
     return parser
 
 
@@ -1212,6 +1492,16 @@ def main(argv: Optional[list[str]] = None) -> int:
             return cmd_runs(args)
         if args.command == "run-detail":
             return cmd_run_detail(args)
+        if args.command == "solutions":
+            return cmd_solutions(args)
+        if args.command == "solution-components":
+            return cmd_solution_components(args)
+        if args.command == "env-vars":
+            return cmd_env_vars(args)
+        if args.command == "env-var-get":
+            return cmd_env_var_get(args)
+        if args.command == "env-var-set":
+            return cmd_env_var_set(args)
     except PowerAutomateError as exc:
         print(exc, file=sys.stderr)
         return 1

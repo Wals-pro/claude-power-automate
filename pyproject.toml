@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "power-automate-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local, open CLI for Microsoft Power Automate cloud flows via the Dataverse and Power Platform APIs, authenticated with the Azure CLI. Part of the claude-power-automate suite."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -7,6 +7,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reache
 > **Beta (0.x).** This is pre-1.0 software. The CLI surface, command output, skill
 > contents, and config schema **may change without notice** between 0.x releases.
 
+## [0.2.0] - 2026-06-26
+
+### Added
+- **Solutions:** `solutions` (list managed/unmanaged) and `solution-components`
+  (inspect a solution's components with readable type labels).
+- **Environment variables:** `env-vars` (list definitions with current + default
+  values, optionally scoped to a solution), `env-var-get`, and `env-var-set`
+  (upsert a value, kept in `--solution` for the DEV → PROD pipeline; `--dry-run`).
+- **Secret safety:** Secret-type environment variables are Azure Key Vault-backed
+  — values are masked by default (`--reveal-secret` shows only the Key Vault
+  reference, never the secret), and `env-var-set` refuses Secret-type variables.
+- New skill **power-automate-solutions** (solution ALM, environment variables,
+  connection references, DEV → PROD).
+
 ## [0.1.0] - 2026-06-26
 
 Initial public release of the **claude-power-automate** suite.
@@ -28,4 +42,5 @@ Initial public release of the **claude-power-automate** suite.
   `power-automate-workflow-patterns`, and `power-automate-run-forensics`.
 - Azure CLI setup guide, operations runbook, and unit test suite.
 
+[0.2.0]: https://github.com/Wals-pro/claude-power-automate/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Wals-pro/claude-power-automate/releases/tag/v0.1.0

@@ -42,6 +42,7 @@ from local artifacts, the same way teams already manage code.
 | **power-automate-action-configuration** | Configuring triggers/actions and `connectionReferences` (Outlook, SharePoint, Dataverse, HTTP) from connector references. |
 | **power-automate-workflow-patterns** | Designing flow architectures — triggers, scopes, error handling, and translating n8n-style routines into Power Automate. |
 | **power-automate-run-forensics** | Read-only incident diagnosis from run history before changing any flow code. |
+| **power-automate-solutions** | Solutions and solution-scoped environment variables (incl. Key Vault secrets), connection references, and the DEV → PROD pipeline. |
 
 ---
 
@@ -168,9 +169,31 @@ register_profile_resolver(lambda profile, field: my_store.get(profile, field))
 | `environments` / `flows` | List environments / cloud flows (`--all-environments` for a user-wide scan). |
 | `runs` / `run-detail` | Read run history and per-action detail for forensics. |
 | `start` / `stop` | Turn a flow on or off. |
+| `solutions` / `solution-components` | List Power Platform solutions; inspect a solution's components. |
+| `env-vars` / `env-var-get` | List / show solution environment variables (Secret-type values masked). |
+| `env-var-set` | Set a non-secret environment variable value (`--solution`, `--dry-run`); refuses Secret-type. |
 | `process-*` | The same operations for non-solution ("process") cloud flows. |
 
 Run `power-automate <command> --help` for the full flag set.
+
+### Solutions & environment variables
+
+The suite is built for solution-based ALM. List solutions and inspect their
+components, then read and set the **environment variables** that parameterize a
+solution across DEV/PROD:
+
+```bash
+power-automate solutions --profile acme
+power-automate solution-components --profile acme --solution acme_CoreAutomation
+power-automate env-vars --profile acme --solution acme_CoreAutomation
+power-automate env-var-set --profile acme acme_ApiBaseUrl "https://api.example.com" --solution acme_CoreAutomation --dry-run
+```
+
+> **Secrets stay secret.** Secret-type environment variables are Azure Key
+> Vault-backed; the CLI **masks** their values by default (`--reveal-secret`
+> shows only the Key Vault reference, never the secret), and `env-var-set`
+> **refuses** Secret-type variables so a secret never reaches your shell history
+> or Dataverse as plaintext.
 
 See **[docs/az-cli-setup.md](docs/az-cli-setup.md)** for authentication and
 **[docs/operations.md](docs/operations.md)** for the deploy runbook.
