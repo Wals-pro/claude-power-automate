@@ -30,3 +30,5 @@ Use this when editing `definition.actions`, `definition.triggers`, or
 - Read `references/actions-connectors.md` for connector/action patterns.
 - Use `power-automate-expression-syntax` for dynamic content.
 - Use `power-automate-api-client` for pull/diff/deploy.
+- Use `power-automate-reference` for the exact action/trigger `type` values, the
+  WDL schema, and `runAfter` semantics.

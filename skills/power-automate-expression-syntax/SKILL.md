@@ -33,3 +33,5 @@ JSON.
   and `actions('Action_Name')`.
 - Avoid copying expressions from rendered docs without checking quotes and
   invisible characters.
+- Confirm a function exists in `power-automate-reference` (the complete WDL
+  namespace) before using it — the namespace is closed; do not invent functions.

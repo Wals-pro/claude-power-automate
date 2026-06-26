@@ -26,7 +26,9 @@ Microsoft Learn sources and local runbooks over third-party examples.
    - `power-automate-api-client` for pull/diff/deploy/status/runs,
    - `power-automate-expression-syntax` for expressions,
    - `power-automate-action-configuration` for action payloads,
-   - `power-automate-run-forensics` for execution analysis.
+   - `power-automate-run-forensics` for execution analysis,
+   - `power-automate-reference` for the exact function/trigger/action namespace
+     and the workflow-definition schema.
 
 ## Rules
 

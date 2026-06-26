@@ -22,6 +22,8 @@ adapts n8n-style workflow discipline to Power Automate concepts.
 4. Use `power-automate-action-configuration` for connector payloads.
 5. Use `power-automate-expression-syntax` for conditions and dynamic content.
 6. Use `power-automate-api-client` for pull/diff/deploy/verify.
+7. Use `power-automate-reference` to confirm trigger/action `type` values and
+   keep expressions inside the real WDL function namespace.
 
 ## Design Rules
 

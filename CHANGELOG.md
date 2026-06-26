@@ -7,6 +7,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reache
 > **Beta (0.x).** This is pre-1.0 software. The CLI surface, command output, skill
 > contents, and config schema **may change without notice** between 0.x releases.
 
+## [0.3.0] - 2026-06-26
+
+### Added
+- New skill **power-automate-reference** — the complete, embedded Workflow
+  Definition Language reference: the full function namespace (string, collection,
+  logical, conversion, math, date/time, workflow/referencing, URI, manipulation),
+  trigger and action `type` values with `runAfter` semantics, and the
+  workflow-definition schema (parameter types incl. `securestring`/`secureobject`,
+  operators, expression vs interpolation). Targets the most common LLM failure mode
+  on Power Automate: invented expression functions and Power Fx leaking into cloud
+  flows. The other knowledge skills now cross-link to it.
+
 ## [0.2.0] - 2026-06-26
 
 ### Added
@@ -42,5 +54,6 @@ Initial public release of the **claude-power-automate** suite.
   `power-automate-workflow-patterns`, and `power-automate-run-forensics`.
 - Azure CLI setup guide, operations runbook, and unit test suite.
 
+[0.3.0]: https://github.com/Wals-pro/claude-power-automate/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Wals-pro/claude-power-automate/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Wals-pro/claude-power-automate/releases/tag/v0.1.0

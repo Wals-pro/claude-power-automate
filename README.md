@@ -1,6 +1,6 @@
 # claude-power-automate
 
-**A Claude Code suite for Microsoft Power Automate development** — six focused
+**A Claude Code suite for Microsoft Power Automate development** — eight focused
 Agent Skills plus a local, open CLI for inspecting and deploying cloud flows.
 No Flow Studio, no hosted MCP, no stored secrets.
 
@@ -29,7 +29,7 @@ from local artifacts, the same way teams already manage code.
   API and the Power Platform API. Pull a live flow to a JSON artifact, diff it,
   back it up, deploy it (with verify), create new solution-aware flows, list
   environments/flows, and read run history for forensics.
-- **Six Claude Code Agent Skills** — domain knowledge and guardrails that make
+- **Eight Claude Code Agent Skills** — domain knowledge and guardrails that make
   Claude reliable on Power Automate work instead of guessing.
 
 ### The skills
@@ -38,6 +38,7 @@ from local artifacts, the same way teams already manage code.
 |---|---|
 | **power-automate-api-client** | Driving the `power-automate` CLI: pull, diff, deploy, create, start/stop, run history, action diagnostics. |
 | **power-automate-docs** | A documentation router that points each task to the correct official Microsoft Learn source. |
+| **power-automate-reference** | The complete WDL function namespace, trigger/action `type` values, and workflow-definition schema — embedded so the agent verifies names instead of inventing functions. |
 | **power-automate-expression-syntax** | Writing/validating expressions, distinguishing Workflow Definition Language (cloud flows) from Power Fx (desktop flows). |
 | **power-automate-action-configuration** | Configuring triggers/actions and `connectionReferences` (Outlook, SharePoint, Dataverse, HTTP) from connector references. |
 | **power-automate-workflow-patterns** | Designing flow architectures — triggers, scopes, error handling, and translating n8n-style routines into Power Automate. |
