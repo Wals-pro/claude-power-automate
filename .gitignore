@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Tool runtime artifacts
+.power-automate-backups/
+
+# Local, machine-specific profile config (never commit env/flow targets)
+profiles.json
+profiles.local.json
+*.local.json
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
