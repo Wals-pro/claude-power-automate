@@ -79,13 +79,22 @@ class PowerAutomateConfig:
     flow_id: Optional[str] = None
     dataverse_url: Optional[str] = None
     entra_tenant_id: Optional[str] = None
+    azure_config_dir: Optional[str] = None
 
 
 class AzureCliTokenProvider(BaseAzureCliTokenProvider):
     """Power Automate-flavoured Azure CLI token provider."""
 
-    def __init__(self, entra_tenant_id: Optional[str] = None):
-        super().__init__(entra_tenant_id=entra_tenant_id, error_type=PowerAutomateError)
+    def __init__(
+        self,
+        entra_tenant_id: Optional[str] = None,
+        azure_config_dir: Optional[str] = None,
+    ):
+        super().__init__(
+            entra_tenant_id=entra_tenant_id,
+            error_type=PowerAutomateError,
+            azure_config_dir=azure_config_dir,
+        )
 
 
 class PowerAutomateClient:
@@ -824,6 +833,7 @@ def load_pa_config(
         flow_id=flow_id,
         dataverse_url=args.dataverse_url or _resolve_optional(args.profile, "dataverse_url"),
         entra_tenant_id=args.entra_tenant_id or _resolve_optional(args.profile, "entra_tenant_id"),
+        azure_config_dir=args.azure_config_dir or _resolve_optional(args.profile, "azure_config_dir"),
     )
 
 
@@ -833,7 +843,13 @@ def build_client(
     require_environment: bool = True,
 ) -> PowerAutomateClient:
     config = load_pa_config(args, require_flow=require_flow, require_environment=require_environment)
-    return PowerAutomateClient(config=config, token_provider=AzureCliTokenProvider(config.entra_tenant_id))
+    return PowerAutomateClient(
+        config=config,
+        token_provider=AzureCliTokenProvider(
+            entra_tenant_id=config.entra_tenant_id,
+            azure_config_dir=config.azure_config_dir,
+        ),
+    )
 
 
 def cmd_pull(args: argparse.Namespace) -> int:
@@ -1323,6 +1339,7 @@ def add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--flow-id", help="Cloud flow workflow id")
     parser.add_argument("--dataverse-url", help="Dataverse environment URL, e.g. https://org.crm4.dynamics.com")
     parser.add_argument("--entra-tenant-id", help="Optional Microsoft Entra tenant id for az token requests")
+    parser.add_argument("--azure-config-dir", help="Optional per-profile AZURE_CONFIG_DIR, so several tenants can stay logged in side by side")
 
 
 def build_parser() -> argparse.ArgumentParser:

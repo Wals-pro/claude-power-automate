@@ -402,6 +402,57 @@ class AuthTest(unittest.TestCase):
             self.assertEqual(provider.token_for("https://api.powerplatform.com/"), "token-1")
         self.assertEqual(mock_run.call_count, 1)
 
+    def test_default_provider_inherits_ambient_az_session(self):
+        provider = pa.AzureCliTokenProvider()
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=json.dumps({"accessToken": "t"}), stderr=""
+        )
+        with patch.object(subprocess, "run", return_value=completed) as mock_run:
+            provider.token_for("https://api.powerplatform.com/")
+        # env=None -> child inherits os.environ, i.e. the shared ~/.azure session.
+        self.assertIsNone(mock_run.call_args.kwargs["env"])
+
+    def test_azure_config_dir_isolates_the_az_session(self):
+        provider = pa.AzureCliTokenProvider(azure_config_dir="~/.azure-acme")
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=json.dumps({"accessToken": "t"}), stderr=""
+        )
+        with patch.object(subprocess, "run", return_value=completed) as mock_run:
+            provider.token_for("https://api.powerplatform.com/")
+        env = mock_run.call_args.kwargs["env"]
+        self.assertEqual(env["AZURE_CONFIG_DIR"], str(Path.home() / ".azure-acme"))
+        self.assertIn("PATH", env)
+
+    def test_two_providers_hold_independent_sessions(self):
+        one = pa.AzureCliTokenProvider(azure_config_dir="~/.azure-one")
+        two = pa.AzureCliTokenProvider(azure_config_dir="~/.azure-two")
+        seen = []
+
+        def fake_run(cmd, **kwargs):
+            seen.append(kwargs["env"]["AZURE_CONFIG_DIR"])
+            token = "token-" + Path(kwargs["env"]["AZURE_CONFIG_DIR"]).name
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout=json.dumps({"accessToken": token}), stderr=""
+            )
+
+        with patch.object(subprocess, "run", side_effect=fake_run):
+            first = one.token_for("https://api.powerplatform.com/")
+            second = two.token_for("https://api.powerplatform.com/")
+
+        self.assertEqual(first, "token-.azure-one")
+        self.assertEqual(second, "token-.azure-two")
+        self.assertEqual(len(set(seen)), 2)
+
+    def test_missing_session_error_names_the_config_dir(self):
+        provider = pa.AzureCliTokenProvider(azure_config_dir="~/.azure-acme")
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="Please run 'az login'"
+        )
+        with patch.object(subprocess, "run", return_value=completed):
+            with self.assertRaises(pa.PowerAutomateError) as ctx:
+                provider.token_for("https://api.powerplatform.com/")
+        self.assertIn(".azure-acme", str(ctx.exception))
+
 
 class ProfileResolveTest(unittest.TestCase):
     def tearDown(self):

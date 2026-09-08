@@ -124,10 +124,12 @@ The CLI never stores secrets. It only resolves the **non-secret target** of a
 command — `environment_id`, `flow_id`, `dataverse_url`, `entra_tenant_id` — in
 this precedence order:
 
-1. **CLI flags:** `--environment-id`, `--flow-id`, `--dataverse-url`, `--entra-tenant-id`
+1. **CLI flags:** `--environment-id`, `--flow-id`, `--dataverse-url`,
+   `--entra-tenant-id`, `--azure-config-dir`
 2. **Environment variables:** `POWER_AUTOMATE_ENVIRONMENT_ID`,
    `POWER_AUTOMATE_FLOW_ID`, `POWER_AUTOMATE_DATAVERSE_URL`,
-   `POWER_AUTOMATE_ENTRA_TENANT_ID` (also `POWER_AUTOMATE_<PROFILE>_<FIELD>`)
+   `POWER_AUTOMATE_ENTRA_TENANT_ID`, `POWER_AUTOMATE_AZURE_CONFIG_DIR`
+   (also `POWER_AUTOMATE_<PROFILE>_<FIELD>`)
 3. **`profiles.json`** at `~/.config/power-automate-cli/profiles.json` (override
    with `$POWER_AUTOMATE_CONFIG`), selected with `--profile`:
 
@@ -137,7 +139,8 @@ this precedence order:
     "environment_id": "00000000-0000-0000-0000-000000000000",
     "flow_id": "11111111-1111-1111-1111-111111111111",
     "dataverse_url": "https://org.crm4.dynamics.com",
-    "entra_tenant_id": "22222222-2222-2222-2222-222222222222"
+    "entra_tenant_id": "22222222-2222-2222-2222-222222222222",
+    "azure_config_dir": "~/.azure-acme"
   }
 }
 ```
@@ -145,6 +148,26 @@ this precedence order:
 `dataverse_url` is optional — if omitted, the CLI discovers it from the Power
 Platform environment metadata. `entra_tenant_id` is only needed when the
 environment lives in a different Entra tenant than your default `az` login.
+
+### Several tenants signed in at once
+
+`entra_tenant_id` covers one account that can reach several tenants. When the
+tenants need **different sign-ins**, give each profile its own Azure CLI session
+store with `azure_config_dir` — it sets `AZURE_CONFIG_DIR` for that profile's
+`az` calls:
+
+```bash
+AZURE_CONFIG_DIR=~/.azure-acme    az login --tenant <acme-tenant-id>    --allow-no-subscriptions
+AZURE_CONFIG_DIR=~/.azure-contoso az login --tenant <contoso-tenant-id> --allow-no-subscriptions
+
+# Both sessions stay valid; these can run at the same time.
+power-automate flows --profile acme
+power-automate flows --profile contoso
+```
+
+A profile with `azure_config_dir` set never falls back to the ambient `~/.azure`
+session — an empty directory produces an error naming it, not a token for the
+wrong identity. See [docs/az-cli-setup.md](docs/az-cli-setup.md).
 
 ### Embedding
 

@@ -7,6 +7,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reache
 > **Beta (0.x).** This is pre-1.0 software. The CLI surface, command output, skill
 > contents, and config schema **may change without notice** between 0.x releases.
 
+## [Unreleased]
+
+### Added
+- **Parallel Azure CLI sessions.** New optional target field `azure_config_dir`
+  (flag `--azure-config-dir`, env var `POWER_AUTOMATE_AZURE_CONFIG_DIR`) sets
+  `AZURE_CONFIG_DIR` for the `az` calls a profile makes. Each profile can point at
+  its own Azure CLI session store, so tenants that need *different sign-ins* stay
+  logged in side by side — no `az login` / `az account set` switching between
+  commands, and profiles can run concurrently. A profile with `azure_config_dir`
+  set never falls back to the ambient `~/.azure` session: an empty directory fails
+  with an error naming the directory rather than issuing a token for the wrong
+  identity.
+
 ## [0.3.0] - 2026-06-26
 
 ### Added
