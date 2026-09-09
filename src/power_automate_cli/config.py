@@ -24,9 +24,16 @@ Profiles file shape (a top-level ``"profiles"`` wrapper is also accepted)::
         "environment_id": "00000000-0000-0000-0000-000000000000",
         "flow_id": "11111111-1111-1111-1111-111111111111",
         "dataverse_url": "https://org.crm4.dynamics.com",
-        "entra_tenant_id": "22222222-2222-2222-2222-222222222222"
+        "entra_tenant_id": "22222222-2222-2222-2222-222222222222",
+        "azure_config_dir": "~/.azure-acme"
       }
     }
+
+``azure_config_dir`` is optional and points the Azure CLI at a per-profile
+session store (``AZURE_CONFIG_DIR``). Give each tenant its own directory and run
+``az login`` once per directory: every profile then keeps its own signed-in
+account, and commands against different tenants can run side by side without
+switching the shared ``~/.azure`` session.
 """
 from __future__ import annotations
 
@@ -35,7 +42,13 @@ import os
 from pathlib import Path
 from typing import Callable, Optional
 
-FIELDS = ("environment_id", "flow_id", "dataverse_url", "entra_tenant_id")
+FIELDS = (
+    "environment_id",
+    "flow_id",
+    "dataverse_url",
+    "entra_tenant_id",
+    "azure_config_dir",
+)
 
 ProfileResolver = Callable[[str, str], Optional[str]]
 

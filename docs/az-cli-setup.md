@@ -107,6 +107,44 @@ When set, the CLI passes `--tenant <entra-tenant-id>` to every
 > Use the tenant **ID** (a GUID), not the tenant domain, to avoid ambiguity
 > when an account is a guest in multiple tenants.
 
+### Several tenants signed in at the same time
+
+`--entra-tenant-id` is enough when *one* account can reach every tenant. When the
+tenants use **different sign-ins** — a separate service account per customer, say
+— a single `az` session cannot hold both: each `az login` replaces the active
+account in the shared `~/.azure` store.
+
+Give each profile its own session store instead. `azure_config_dir` (flag
+`--azure-config-dir`, env var `POWER_AUTOMATE_AZURE_CONFIG_DIR`) sets
+`AZURE_CONFIG_DIR` for the `az` calls that profile makes:
+
+```bash
+# One-time login per tenant, each into its own directory
+AZURE_CONFIG_DIR=~/.azure-acme    az login --tenant <acme-tenant-id>    --allow-no-subscriptions
+AZURE_CONFIG_DIR=~/.azure-contoso az login --tenant <contoso-tenant-id> --allow-no-subscriptions
+```
+
+```json
+{
+  "acme":    { "environment_id": "...", "azure_config_dir": "~/.azure-acme" },
+  "contoso": { "environment_id": "...", "azure_config_dir": "~/.azure-contoso" }
+}
+```
+
+Both logins now stay valid indefinitely and independently. Commands against
+different tenants can run **concurrently** — including in parallel shells or
+agent sessions — with no `az login` or `az account set` in between:
+
+```bash
+power-automate flows --profile acme &
+power-automate flows --profile contoso &
+```
+
+A profile with `azure_config_dir` set never falls back to the ambient `~/.azure`
+session: if that directory holds no login, the command fails with an error naming
+the directory rather than silently acting as the wrong identity. That failure mode
+matters most when the tenants belong to different customers.
+
 ## 3. Inspect and select your account
 
 Show the currently active subscription and signed-in user:

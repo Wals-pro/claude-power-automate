@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -401,6 +402,137 @@ class AuthTest(unittest.TestCase):
             self.assertEqual(provider.token_for("https://api.powerplatform.com/"), "token-1")
             self.assertEqual(provider.token_for("https://api.powerplatform.com/"), "token-1")
         self.assertEqual(mock_run.call_count, 1)
+
+    def test_default_provider_inherits_ambient_az_session(self):
+        provider = pa.AzureCliTokenProvider()
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=json.dumps({"accessToken": "t"}), stderr=""
+        )
+        with patch.object(subprocess, "run", return_value=completed) as mock_run:
+            provider.token_for("https://api.powerplatform.com/")
+        # env=None -> child inherits os.environ, i.e. the shared ~/.azure session.
+        self.assertIsNone(mock_run.call_args.kwargs["env"])
+
+    def test_azure_config_dir_isolates_the_az_session(self):
+        provider = pa.AzureCliTokenProvider(azure_config_dir="~/.azure-acme")
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=json.dumps({"accessToken": "t"}), stderr=""
+        )
+        with patch.object(subprocess, "run", return_value=completed) as mock_run:
+            provider.token_for("https://api.powerplatform.com/")
+        env = mock_run.call_args.kwargs["env"]
+        self.assertEqual(env["AZURE_CONFIG_DIR"], str(Path.home() / ".azure-acme"))
+        self.assertIn("PATH", env)
+
+    def test_two_providers_hold_independent_sessions(self):
+        one = pa.AzureCliTokenProvider(azure_config_dir="~/.azure-one")
+        two = pa.AzureCliTokenProvider(azure_config_dir="~/.azure-two")
+        seen = []
+
+        def fake_run(cmd, **kwargs):
+            seen.append(kwargs["env"]["AZURE_CONFIG_DIR"])
+            token = "token-" + Path(kwargs["env"]["AZURE_CONFIG_DIR"]).name
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout=json.dumps({"accessToken": token}), stderr=""
+            )
+
+        with patch.object(subprocess, "run", side_effect=fake_run):
+            first = one.token_for("https://api.powerplatform.com/")
+            second = two.token_for("https://api.powerplatform.com/")
+
+        self.assertEqual(first, "token-.azure-one")
+        self.assertEqual(second, "token-.azure-two")
+        self.assertEqual(len(set(seen)), 2)
+
+    def test_missing_session_error_names_the_config_dir(self):
+        provider = pa.AzureCliTokenProvider(azure_config_dir="~/.azure-acme")
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="Please run 'az login'"
+        )
+        with patch.object(subprocess, "run", return_value=completed):
+            with self.assertRaises(pa.PowerAutomateError) as ctx:
+                provider.token_for("https://api.powerplatform.com/")
+        self.assertIn(".azure-acme", str(ctx.exception))
+
+
+class EnvironmentPairTest(unittest.TestCase):
+    """`environment_id` and `dataverse_url` are one fact.
+
+    Resolving them as two independent fields makes --environment-id silently
+    ineffective: the id changes, the profile URL stays, and every Dataverse call
+    keeps hitting the old environment — writing commands included.
+    """
+
+    CFG_ENV = "cfg-env-id"
+    CFG_URL = "https://cfg.crm4.dynamics.com"
+
+    def _args(self, **over):
+        base = dict(
+            profile="acme", environment_id=None, flow_id=None, dataverse_url=None,
+            entra_tenant_id=None, azure_config_dir=None,
+        )
+        base.update(over)
+        return argparse.Namespace(**base)
+
+    def _load(self, **over):
+        def resolver(profile, field):
+            return {"environment_id": self.CFG_ENV, "dataverse_url": self.CFG_URL}.get(field)
+        pa_config.register_profile_resolver(resolver)
+        try:
+            return pa.load_pa_config(self._args(**over), require_flow=False)
+        finally:
+            pa_config.register_profile_resolver(None)
+
+    def test_profile_pair_is_used_when_no_flag_overrides_it(self):
+        cfg = self._load()
+        self.assertEqual(cfg.environment_id, self.CFG_ENV)
+        self.assertEqual(cfg.dataverse_url, self.CFG_URL)
+
+    def test_other_environment_id_must_not_inherit_the_profile_url(self):
+        """The regression."""
+        cfg = self._load(environment_id="other-env-id")
+        self.assertEqual(cfg.environment_id, "other-env-id")
+        self.assertIsNone(cfg.dataverse_url, "must fall through to discovery")
+
+    def test_same_environment_id_passed_explicitly_keeps_the_profile_url(self):
+        self.assertEqual(self._load(environment_id=self.CFG_ENV).dataverse_url, self.CFG_URL)
+
+    def test_explicit_url_wins_and_is_attributed(self):
+        cfg = self._load(dataverse_url="https://flag.crm4.dynamics.com")
+        self.assertEqual(cfg.dataverse_url, "https://flag.crm4.dynamics.com")
+        self.assertEqual(cfg.dataverse_url_source, "--dataverse-url")
+
+    def _client(self, environment_id, dataverse_url, source="--dataverse-url"):
+        cfg = pa.PowerAutomateConfig(
+            tenant="acme", environment_id=environment_id,
+            dataverse_url=dataverse_url, dataverse_url_source=source,
+        )
+        return pa.PowerAutomateClient(config=cfg, token_provider=Mock())
+
+    def test_contradictory_pair_aborts_with_both_urls_named(self):
+        client = self._client("prod-env-id", "https://dev.crm4.dynamics.com")
+        with patch.object(
+            client, "discover_dataverse_url", return_value="https://prod.crm4.dynamics.com"
+        ):
+            with self.assertRaises(pa.PowerAutomateError) as ctx:
+                client.verify_environment_pair()
+        message = str(ctx.exception)
+        for expected in ("prod-env-id", "https://prod.crm4.dynamics.com",
+                         "https://dev.crm4.dynamics.com", "--dataverse-url"):
+            self.assertIn(expected, message)
+
+    def test_consistent_pair_passes_verification(self):
+        client = self._client("env-id", "https://ok.crm4.dynamics.com")
+        with patch.object(
+            client, "discover_dataverse_url", return_value="https://ok.crm4.dynamics.com/"
+        ):
+            client.verify_environment_pair()  # trailing slash is normalised away
+
+    def test_verification_is_skipped_when_the_url_will_be_discovered(self):
+        client = self._client("env-id", None, source=None)
+        with patch.object(client, "discover_dataverse_url") as discover:
+            client.verify_environment_pair()
+        discover.assert_not_called()
 
 
 class ProfileResolveTest(unittest.TestCase):
