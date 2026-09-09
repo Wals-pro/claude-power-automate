@@ -13,6 +13,9 @@ venv/
 
 # Tool runtime artifacts
 .power-automate-backups/
+# Solution exports and pulled artefacts land here. They contain customer flow
+# definitions, so they must never be committed to this public repository.
+tmp/
 
 # Local, machine-specific profile config (never commit env/flow targets)
 profiles.json
