@@ -9,6 +9,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reache
 
 ## [Unreleased]
 
+### Fixed
+- **`--environment-id` was silently overridden by a configured Dataverse URL.**
+  `environment_id` and `dataverse_url` are one fact but were resolved as two
+  independent fields, so pointing `--environment-id` at another environment left
+  the profile's URL in place — and every Dataverse call routes through that URL.
+  Reads returned the wrong environment's data; the writing commands (`deploy`,
+  `process-deploy`, `create`, `start`/`stop`, `env-var-set`) acted on it. A
+  profile URL is now only used for that profile's own environment; otherwise it
+  is re-derived from the requested id. On top of that, a supplied URL is treated
+  as an assertion and **verified** against the Power Platform API before anything
+  runs, for reads as well as writes: a contradictory pair aborts naming both URLs
+  and the source of the wrong one. The error messages no longer recommend
+  configuring a Dataverse URL, which is what led into the trap.
+
 ### Added
 - **Parallel Azure CLI sessions.** New optional target field `azure_config_dir`
   (flag `--azure-config-dir`, env var `POWER_AUTOMATE_AZURE_CONFIG_DIR`) sets

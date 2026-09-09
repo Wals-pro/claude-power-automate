@@ -80,6 +80,9 @@ class PowerAutomateConfig:
     dataverse_url: Optional[str] = None
     entra_tenant_id: Optional[str] = None
     azure_config_dir: Optional[str] = None
+    # Where dataverse_url came from, for the fail-closed message. None means it
+    # was not supplied at all and gets discovered from environment_id.
+    dataverse_url_source: Optional[str] = None
 
 
 class AzureCliTokenProvider(BaseAzureCliTokenProvider):
@@ -117,6 +120,32 @@ class PowerAutomateClient:
         self._dataverse_url = normalize_base_url(discovered)
         return self._dataverse_url
 
+    def verify_environment_pair(self) -> None:
+        """Fail closed when dataverse_url and environment_id disagree.
+
+        The two are one fact, not two fields. Every Dataverse call routes through
+        the URL, so an inconsistent pair acts on a different environment than the
+        one requested — silently, and for the writing commands destructively. A
+        supplied URL is therefore treated as an assertion about environment_id and
+        checked against the Power Platform API, never trusted as a second source
+        of truth. Costs one API call: the same one discovery would have made.
+        """
+        if not (self.config.environment_id and self._dataverse_url):
+            return
+        actual = normalize_base_url(self.discover_dataverse_url())
+        if actual == self._dataverse_url:
+            return
+        source = self.config.dataverse_url_source or "the resolved configuration"
+        raise PowerAutomateError(
+            "Refusing to run: the Dataverse URL does not belong to the requested "
+            "environment.\n"
+            f"  --environment-id  {self.config.environment_id}\n"
+            f"  that environment  {actual}\n"
+            f"  but URL from {source}: {self._dataverse_url}\n"
+            "Drop the conflicting URL and let it be derived from --environment-id, "
+            "or pass the URL that belongs to it."
+        )
+
     def discover_dataverse_url(self) -> str:
         url = (
             "https://api.powerplatform.com/environmentmanagement/environments/"
@@ -127,8 +156,9 @@ class PowerAutomateClient:
         except PowerAutomateError as exc:
             raise PowerAutomateError(
                 "Could not read Power Platform environment metadata. Check that `az login` uses "
-                "an account/tenant with access to the environment, or set the Dataverse URL "
-                "(--dataverse-url or POWER_AUTOMATE_DATAVERSE_URL).\n"
+                "an account/tenant with access to the environment. Supplying the Dataverse "
+                "URL skips this lookup, but it must then belong to --environment-id: it is "
+                "verified, not trusted.\n"
                 f"{exc}"
             ) from exc
         props = data.get("properties") if isinstance(data, dict) else {}
@@ -147,8 +177,10 @@ class PowerAutomateClient:
                     value = value.replace(".api.crm", ".crm", 1)
                 return value
         raise PowerAutomateError(
-            "Could not discover Dataverse URL for environment. Set --dataverse-url or "
-            "POWER_AUTOMATE_DATAVERSE_URL (e.g. https://org.crm4.dynamics.com)."
+            "Could not discover Dataverse URL for environment "
+            f"{self.config.environment_id}. Check that the environment id is correct and "
+            "that the signed-in account can read it. Only supply a Dataverse URL if you "
+            "know it belongs to that environment."
         )
 
     def get_environment(self, environment_id: Optional[str] = None) -> dict[str, Any]:
@@ -818,7 +850,8 @@ def load_pa_config(
     require_flow: bool = True,
     require_environment: bool = True,
 ) -> PowerAutomateConfig:
-    environment_id = args.environment_id or _resolve_optional(args.profile, "environment_id")
+    configured_environment_id = _resolve_optional(args.profile, "environment_id")
+    environment_id = args.environment_id or configured_environment_id
     if require_environment and not environment_id:
         raise PowerAutomateError(
             "Missing Power Automate environment. Pass --environment-id, set "
@@ -827,11 +860,25 @@ def load_pa_config(
     flow_id = args.flow_id or _resolve_optional(args.profile, "flow_id")
     if require_flow:
         require_flow_id(flow_id)
+    # environment_id and dataverse_url are ONE fact. Resolving them as two
+    # independent fields makes --environment-id silently ineffective: the id
+    # changes, the profile URL stays, and every Dataverse call keeps going to the
+    # old environment. A profile URL is therefore only valid for that profile's
+    # environment; point --environment-id elsewhere and the URL must be re-derived
+    # from it (dataverse_url=None -> discovery).
+    dataverse_url = args.dataverse_url
+    dataverse_url_source = "--dataverse-url" if dataverse_url else None
+    if not dataverse_url and environment_id and environment_id == configured_environment_id:
+        dataverse_url = _resolve_optional(args.profile, "dataverse_url")
+        if dataverse_url:
+            dataverse_url_source = f"profile {args.profile!r}"
+
     return PowerAutomateConfig(
         tenant=args.profile,
         environment_id=environment_id,
         flow_id=flow_id,
-        dataverse_url=args.dataverse_url or _resolve_optional(args.profile, "dataverse_url"),
+        dataverse_url=dataverse_url,
+        dataverse_url_source=dataverse_url_source,
         entra_tenant_id=args.entra_tenant_id or _resolve_optional(args.profile, "entra_tenant_id"),
         azure_config_dir=args.azure_config_dir or _resolve_optional(args.profile, "azure_config_dir"),
     )
@@ -843,13 +890,17 @@ def build_client(
     require_environment: bool = True,
 ) -> PowerAutomateClient:
     config = load_pa_config(args, require_flow=require_flow, require_environment=require_environment)
-    return PowerAutomateClient(
+    client = PowerAutomateClient(
         config=config,
         token_provider=AzureCliTokenProvider(
             entra_tenant_id=config.entra_tenant_id,
             azure_config_dir=config.azure_config_dir,
         ),
     )
+    # Fail closed for every command, reads included: this class of mistake was
+    # found through a plausible-looking read, not a failed write.
+    client.verify_environment_pair()
+    return client
 
 
 def cmd_pull(args: argparse.Namespace) -> int:
